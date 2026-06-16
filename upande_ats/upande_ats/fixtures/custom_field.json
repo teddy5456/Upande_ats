@@ -69,9 +69,39 @@
  {
   "doctype": "Custom Field",
   "dt": "Job Applicant",
+  "fieldname": "ats_result",
+  "fieldtype": "Select",
+  "label": "ATS Result",
+  "options": "\nNot Scored\nPass\nFail",
+  "read_only": 1,
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "insert_after": "ats_score_link"
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Job Applicant",
+  "fieldname": "ats_reason",
+  "fieldtype": "Small Text",
+  "label": "ATS Reason",
+  "read_only": 1,
+  "insert_after": "ats_result"
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Job Applicant",
+  "fieldname": "ats_screened_on",
+  "fieldtype": "Datetime",
+  "label": "ATS Screened On",
+  "read_only": 1,
+  "insert_after": "ats_reason"
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Job Applicant",
   "fieldname": "ats_breakdown_html",
   "fieldtype": "HTML",
   "label": "ATS Breakdown",
-  "insert_after": "ats_score_link"
+  "insert_after": "ats_screened_on"
  }
 ]

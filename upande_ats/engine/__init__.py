@@ -29,7 +29,8 @@ def _keywords_for_opening(opening_name: str) -> list:
 
 
 def _resume_url(applicant_doc) -> str:
-	return applicant_doc.get("resume_attachment") or ""
+	# Prefer the uploaded file (Attach); fall back to a local Resume Link if set.
+	return applicant_doc.get("resume_attachment") or applicant_doc.get("resume_link") or ""
 
 
 def _passmark_for_opening(opening_name: str, settings) -> float:

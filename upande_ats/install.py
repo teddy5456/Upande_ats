@@ -59,19 +59,126 @@ CUSTOM_FIELDS = {
 			"insert_after": "ats_passes_passmark",
 		},
 		{
+			"fieldname": "ats_result",
+			"fieldtype": "Select",
+			"label": "ATS Result",
+			"options": "\nNot Scored\nPass\nFail",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"insert_after": "ats_score_link",
+		},
+		{
+			"fieldname": "ats_reason",
+			"fieldtype": "Small Text",
+			"label": "ATS Reason",
+			"read_only": 1,
+			"insert_after": "ats_result",
+		},
+		{
+			"fieldname": "ats_screened_on",
+			"fieldtype": "Datetime",
+			"label": "ATS Screened On",
+			"read_only": 1,
+			"insert_after": "ats_reason",
+		},
+		{
 			"fieldname": "ats_breakdown_html",
 			"fieldtype": "HTML",
 			"label": "ATS Breakdown",
-			"insert_after": "ats_score_link",
+			"insert_after": "ats_screened_on",
 		},
 	],
 }
 
 
+REJECTED_REPORT_NAME = "Screening - Rejected"
+
+REJECTED_REPORT_QUERY = """SELECT
+\tja.name            AS "Applicant:Link/Job Applicant:160",
+\tja.applicant_name  AS "Name:Data:160",
+\tja.job_title       AS "Opening:Link/Job Opening:180",
+\tja.designation     AS "Designation:Link/Designation:140",
+\tja.ats_score       AS "Score %%:Percent:90",
+\tja.ats_reason      AS "Reason:Data:340",
+\tja.ats_screened_on AS "Screened On:Datetime:160"
+FROM `tabJob Applicant` ja
+WHERE ja.status = 'Rejected' AND ja.ats_result = 'Fail'
+ORDER BY ja.ats_screened_on DESC"""
+
+
 def after_install():
 	create_custom_fields(CUSTOM_FIELDS, update=True)
 	_seed_settings()
+	setup_hr_views()
 	frappe.db.commit()
+
+
+def after_migrate():
+	"""Re-assert app-owned custom fields, HR list view, shortcut and report on every migrate.
+
+	Standard (hrms) workspaces can be re-synced on migrate, so we idempotently
+	re-add our shortcut and report here rather than relying on a one-time install.
+	"""
+	create_custom_fields(CUSTOM_FIELDS, update=True)
+	setup_hr_views()
+	frappe.db.commit()
+
+
+def setup_hr_views():
+	_ensure_rejected_report()
+	_ensure_to_review_shortcut()
+
+
+def _ensure_rejected_report():
+	"""Create/update the 'Screening - Rejected' Query Report (idempotent)."""
+	values = {
+		"report_type": "Query Report",
+		"ref_doctype": "Job Applicant",
+		"module": "Upande ATS",
+		"is_standard": "No",
+		"disabled": 0,
+		"query": REJECTED_REPORT_QUERY,
+	}
+	if frappe.db.exists("Report", REJECTED_REPORT_NAME):
+		report = frappe.get_doc("Report", REJECTED_REPORT_NAME)
+		report.update(values)
+	else:
+		report = frappe.new_doc("Report")
+		report.report_name = REJECTED_REPORT_NAME
+		report.update(values)
+	report.flags.ignore_permissions = True
+	report.save()
+
+
+def _ensure_to_review_shortcut():
+	"""Add a 'To Review' shortcut (Job Applicant list filtered to status=Open) to the
+	Recruitment workspace, so HR's working queue hides auto-rejected applicants."""
+	if not frappe.db.exists("Workspace", "Recruitment"):
+		return
+	ws = frappe.get_doc("Workspace", "Recruitment")
+	for sc in ws.shortcuts:
+		if sc.label == "To Review":
+			sc.type = "DocType"
+			sc.link_to = "Job Applicant"
+			sc.doc_view = "List"
+			sc.stats_filter = '{"status":"Open"}'
+			sc.color = "Green"
+			break
+	else:
+		ws.append(
+			"shortcuts",
+			{
+				"type": "DocType",
+				"link_to": "Job Applicant",
+				"label": "To Review",
+				"doc_view": "List",
+				"stats_filter": '{"status":"Open"}',
+				"color": "Green",
+			},
+		)
+	ws.flags.ignore_permissions = True
+	ws.save()
 
 
 def _seed_settings():

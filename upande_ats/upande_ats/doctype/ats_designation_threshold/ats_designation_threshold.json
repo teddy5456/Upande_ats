@@ -1,0 +1,60 @@
+{
+ "actions": [],
+ "creation": "2026-06-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "designation",
+  "min_score",
+  "action_on_fail",
+  "required_keywords"
+ ],
+ "fields": [
+  {
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Designation",
+   "options": "Designation",
+   "reqd": 1
+  },
+  {
+   "default": "60",
+   "description": "Pass mark for this designation (0-100). Applicants scoring below this fail.",
+   "fieldname": "min_score",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Min Score %",
+   "reqd": 1
+  },
+  {
+   "default": "Reject",
+   "description": "What to do when an applicant fails the pass mark. Reject auto-rejects; Flag for Review keeps them Open while you tune the threshold.",
+   "fieldname": "action_on_fail",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action on Fail",
+   "options": "Reject\nFlag for Review"
+  },
+  {
+   "description": "Optional comma-separated keywords that MUST appear in the resume, else the applicant fails regardless of score.",
+   "fieldname": "required_keywords",
+   "fieldtype": "Small Text",
+   "label": "Required Keywords"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande ATS",
+ "name": "ATS Designation Threshold",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

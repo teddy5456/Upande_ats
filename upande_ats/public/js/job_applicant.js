@@ -25,6 +25,27 @@ frappe.ui.form.on("Job Applicant", {
 			__("ATS")
 		);
 
+		frm.add_custom_button(
+			__("Re-run Screening"),
+			() => {
+				frappe.call({
+					method: "upande_ats.screening.run_screening",
+					args: { applicant: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Screening applicant..."),
+				}).then((r) => {
+					if (r.message) {
+						frappe.show_alert({
+							message: __("Result: {0}", [r.message.result]),
+							indicator: r.message.result === "Pass" ? "green" : "orange",
+						});
+						frm.reload_doc();
+					}
+				});
+			},
+			__("ATS")
+		);
+
 		if (frm.doc.ats_score_link) {
 			frm.add_custom_button(
 				__("View Breakdown"),

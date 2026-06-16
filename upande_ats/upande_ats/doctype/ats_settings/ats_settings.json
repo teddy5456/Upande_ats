@@ -11,6 +11,8 @@
   "column_break_general",
   "score_visibility_role",
   "keep_score_history",
+  "thresholds_section",
+  "designation_thresholds",
   "engines_section",
   "engine_weights",
   "mandatory_section",
@@ -59,6 +61,18 @@
    "fieldname": "keep_score_history",
    "fieldtype": "Check",
    "label": "Keep Score History"
+  },
+  {
+   "fieldname": "thresholds_section",
+   "fieldtype": "Section Break",
+   "label": "Per-Designation Pass Marks"
+  },
+  {
+   "description": "Pass mark per Designation. A Job Opening's Passmark Override (if set) wins over these; designations with no row fall back to Default Passmark above.",
+   "fieldname": "designation_thresholds",
+   "fieldtype": "Table",
+   "label": "Designation Thresholds",
+   "options": "ATS Designation Threshold"
   },
   {
    "fieldname": "engines_section",

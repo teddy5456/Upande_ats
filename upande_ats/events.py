@@ -1,8 +1,17 @@
 import frappe
 
 
-def maybe_score_on_save(doc, method=None):
-	"""Trigger background scoring when a Job Applicant gets a new/changed resume."""
+def maybe_screen_on_update(doc, method=None):
+	"""on_update hook: re-screen a Job Applicant when its resume changes.
+
+	The initial insert is handled by screening.enqueue_screening (after_insert),
+	so this skips brand-new docs and only fires on a genuine resume change.
+	"""
+	previous = doc.get_doc_before_save()
+	if previous is None:
+		# Brand-new doc — after_insert already enqueues screening. Don't double-run.
+		return
+
 	try:
 		settings = frappe.get_single("ATS Settings")
 	except Exception:
@@ -10,29 +19,20 @@ def maybe_score_on_save(doc, method=None):
 
 	if not bool(settings.auto_score_on_resume_upload):
 		return
-	if not doc.get("resume_attachment"):
+	if not doc.get("resume_attachment") or not doc.get("job_title"):
 		return
-	if not doc.get("job_title"):
-		return
-
-	previous = doc.get_doc_before_save()
-	if (
-		previous is not None
-		and previous.get("resume_attachment") == doc.get("resume_attachment")
-		and doc.get("ats_score_link")
-	):
+	if previous.get("resume_attachment") == doc.get("resume_attachment"):
+		# Resume unchanged — nothing to re-score.
 		return
 
 	try:
 		frappe.enqueue(
-			"upande_ats.engine.score_applicant",
-			queue="long",
-			job_name=f"ats-score-{doc.name}",
+			"upande_ats.screening.run_screening",
+			queue="short",
+			job_name=f"ats-screen-{doc.name}",
 			enqueue_after_commit=True,
 			applicant=doc.name,
-			opening=doc.job_title,
 		)
 	except Exception:
-		# Redis unavailable (e.g. in dev/console). Log and skip — scoring can be
-		# triggered manually via the Re-score button.
-		frappe.log_error(frappe.get_traceback(), "ATS auto-score enqueue failed")
+		# Redis unavailable (dev/console). Log and skip — use the Re-run Screening button.
+		frappe.log_error(frappe.get_traceback(), "ATS re-screen enqueue failed")
