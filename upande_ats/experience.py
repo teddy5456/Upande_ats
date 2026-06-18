@@ -16,6 +16,7 @@ which the gate turns into "Flag for Review" rather than a reject.
 """
 
 import re
+from datetime import date, datetime
 
 import frappe
 from frappe.utils import getdate
@@ -103,15 +104,49 @@ def _parse_point(token: str):
 		if mon and _plausible_year(year):
 			return year, mon
 
-	# Fall back to dateparser for anything fuzzier.
-	try:
-		import dateparser
+	# Fall back to a stdlib parse for anything the fast paths missed.
+	dt = _parse_date(token)
+	if dt and _plausible_year(dt.year):
+		return dt.year, dt.month
+	return None
 
-		dt = dateparser.parse(token, settings={"PREFER_DAY_OF_MONTH": "first"})
-		if dt and _plausible_year(dt.year):
-			return dt.year, dt.month
-	except Exception:
+
+# Open-ended end points that resolve to "today" when parsed standalone.
+_OPEN_ENDED_TOKENS = {"present", "now", "current", "to date", "since"}
+
+
+def _parse_date(token: str):
+	"""Convert a single matched token into a date, using only the stdlib.
+
+	Tries, in order: "%B %Y"/"%b %Y" (February 2020 / Feb 2020), "%m/%Y"
+	(02/2020), a bare 4-digit year (-> Jan 1 of that year), and the open-ended
+	words (present/now/current/to date/since -> today). Returns None if nothing
+	matches. Day is normalised to the 1st for clean, consistent durations.
+	"""
+	if not token:
+		return None
+	token = token.strip().rstrip(".,")
+	if not token:
+		return None
+
+	if token.lower() in _OPEN_ENDED_TOKENS:
+		d = getdate()
+		return date(d.year, d.month, d.day)
+
+	for fmt in ("%B %Y", "%b %Y"):
+		try:
+			return datetime.strptime(token, fmt).date()
+		except ValueError:
+			pass
+
+	try:
+		return datetime.strptime(token, "%m/%Y").date()
+	except ValueError:
 		pass
+
+	if re.fullmatch(r"\d{4}", token):
+		return date(int(token), 1, 1)
+
 	return None
 
 
@@ -166,9 +201,17 @@ def parse_work_history(resume_text: str) -> list:
 			start = _parse_point(m.group("start"))
 			end_tok = m.group("end")
 			end = _parse_point(end_tok)
-			if not start or not end:
+			# A role is unparseable only if BOTH ends fail. If just the end
+			# didn't parse, treat the range as running to today; without a
+			# start there's no anchor to measure from, so drop it.
+			if not start and not end:
 				continue
 			open_ended = bool(re.fullmatch(_OPEN_ENDED, end_tok.strip(), flags=re.IGNORECASE))
+			if not end:
+				end = _today_ym()
+				open_ended = True
+			if not start:
+				continue
 			# Discard reversed/implausible ranges.
 			if _months_between(start, end) <= 0 and not open_ended:
 				continue
