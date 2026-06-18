@@ -29,5 +29,5 @@ doctype_list_js = {
 }
 
 fixtures = [
-	{"dt": "Custom Field", "filters": [["dt", "in", ["Job Opening", "Job Applicant"]], ["fieldname", "like", "ats_%"]]},
+	{"dt": "Custom Field", "filters": [["dt", "in", ["Job Opening", "Job Applicant", "Designation"]], ["fieldname", "like", "ats_%"]]},
 ]

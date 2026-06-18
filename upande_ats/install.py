@@ -3,6 +3,16 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
 CUSTOM_FIELDS = {
+	"Designation": [
+		{
+			"fieldname": "ats_keywords",
+			"fieldtype": "Table MultiSelect",
+			"label": "ATS Keywords",
+			"options": "ATS Designation Keyword",
+			"insert_after": "description",
+			"description": "Standard ATS keywords for this role; auto-populated into new Job Openings.",
+		},
+	],
 	"Job Opening": [
 		{
 			"fieldname": "ats_section",
