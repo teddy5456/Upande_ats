@@ -35,6 +35,29 @@ CUSTOM_FIELDS = {
 			"description": "Overrides default passmark from ATS Settings for this opening only.",
 			"insert_after": "ats_keywords",
 		},
+		{
+			"fieldname": "ats_min_relevant_experience",
+			"fieldtype": "Float",
+			"label": "Minimum Relevant Years",
+			"precision": "1",
+			"description": (
+				"Minimum years of <i>relevant</i> experience required for this opening. "
+				"Overrides the per-designation default. Leave blank/0 to use the designation "
+				"default (and if neither is set, the experience gate is off for this opening)."
+			),
+			"insert_after": "ats_passmark_override",
+		},
+		{
+			"fieldname": "ats_preferred_max_experience",
+			"fieldtype": "Float",
+			"label": "Preferred Max Years",
+			"precision": "1",
+			"description": (
+				"Display/preference only — shown to HR but NEVER used to reject. "
+				"Over-qualified applicants are not auto-rejected."
+			),
+			"insert_after": "ats_min_relevant_experience",
+		},
 	],
 	"Job Applicant": [
 		{
@@ -72,7 +95,7 @@ CUSTOM_FIELDS = {
 			"fieldname": "ats_result",
 			"fieldtype": "Select",
 			"label": "ATS Result",
-			"options": "\nNot Scored\nPass\nFail",
+			"options": "\nNot Scored\nPass\nFail\nNeeds Review",
 			"read_only": 1,
 			"in_list_view": 1,
 			"in_standard_filter": 1,
@@ -86,11 +109,51 @@ CUSTOM_FIELDS = {
 			"insert_after": "ats_result",
 		},
 		{
+			"fieldname": "ats_auto_rejected",
+			"fieldtype": "Check",
+			"label": "Auto-Rejected by ATS",
+			"default": "0",
+			"read_only": 1,
+			"in_standard_filter": 1,
+			"description": (
+				"1 when ATS set the status to Rejected. A later clean Pass re-run clears this "
+				"and re-opens the applicant; a manual rejection (flag 0) is never auto-reopened."
+			),
+			"insert_after": "ats_reason",
+		},
+		{
+			"fieldname": "ats_total_experience",
+			"fieldtype": "Float",
+			"label": "Total Experience (yrs)",
+			"precision": "1",
+			"read_only": 1,
+			"description": "Total work experience detected from the CV (overlaps merged).",
+			"insert_after": "ats_reason",
+		},
+		{
+			"fieldname": "ats_relevant_experience",
+			"fieldtype": "Float",
+			"label": "Relevant Experience (yrs)",
+			"precision": "1",
+			"read_only": 1,
+			"in_standard_filter": 1,
+			"description": "Years of experience judged relevant to the designation's keywords.",
+			"insert_after": "ats_total_experience",
+		},
+		{
+			"fieldname": "ats_experience_breakdown",
+			"fieldtype": "Small Text",
+			"label": "Experience Breakdown",
+			"read_only": 1,
+			"description": "Per-role detected months and whether each was counted as relevant (JSON).",
+			"insert_after": "ats_relevant_experience",
+		},
+		{
 			"fieldname": "ats_screened_on",
 			"fieldtype": "Datetime",
 			"label": "ATS Screened On",
 			"read_only": 1,
-			"insert_after": "ats_reason",
+			"insert_after": "ats_experience_breakdown",
 		},
 		{
 			"fieldname": "ats_breakdown_html",
@@ -102,19 +165,16 @@ CUSTOM_FIELDS = {
 }
 
 
-REJECTED_REPORT_NAME = "Screening - Rejected"
-
-REJECTED_REPORT_QUERY = """SELECT
-\tja.name            AS "Applicant:Link/Job Applicant:160",
-\tja.applicant_name  AS "Name:Data:160",
-\tja.job_title       AS "Opening:Link/Job Opening:180",
-\tja.designation     AS "Designation:Link/Designation:140",
-\tja.ats_score       AS "Score %%:Percent:90",
-\tja.ats_reason      AS "Reason:Data:340",
-\tja.ats_screened_on AS "Screened On:Datetime:160"
-FROM `tabJob Applicant` ja
-WHERE ja.status = 'Rejected' AND ja.ats_result = 'Fail'
-ORDER BY ja.ats_screened_on DESC"""
+# The two screening reports are now standard file-based Script Reports shipped in the app
+# (upande_ats/upande_ats/report/screening_for_review and .../screening_rejected), so the
+# WHERE is built conditionally in Python and an empty Job Opening filter is handled cleanly.
+# These are the legacy DB-stored Query Report names to delete on migrate so they can't
+# shadow or duplicate the standard ones.
+LEGACY_QUERY_REPORT_NAMES = [
+	"Screening - Action Needed",
+	"Screening - For Review",
+	"Screening - Rejected",
+]
 
 
 def after_install():
@@ -136,29 +196,24 @@ def after_migrate():
 
 
 def setup_hr_views():
-	_ensure_rejected_report()
+	_drop_legacy_query_reports()
 	_ensure_to_review_shortcut()
 
 
-def _ensure_rejected_report():
-	"""Create/update the 'Screening - Rejected' Query Report (idempotent)."""
-	values = {
-		"report_type": "Query Report",
-		"ref_doctype": "Job Applicant",
-		"module": "Upande ATS",
-		"is_standard": "No",
-		"disabled": 0,
-		"query": REJECTED_REPORT_QUERY,
-	}
-	if frappe.db.exists("Report", REJECTED_REPORT_NAME):
-		report = frappe.get_doc("Report", REJECTED_REPORT_NAME)
-		report.update(values)
-	else:
-		report = frappe.new_doc("Report")
-		report.report_name = REJECTED_REPORT_NAME
-		report.update(values)
-	report.flags.ignore_permissions = True
-	report.save()
+def _drop_legacy_query_reports():
+	"""Delete leftover DB-stored Query Report docs for the screening reports.
+
+	These were previously created in code as Query Reports; they are now standard
+	Script Reports shipped as files. Removing the Query Report rows prevents a
+	duplicate/shadowing report with the same name. Standard (file-based) reports of
+	the same name are left untouched — only report_type == 'Query Report' is dropped.
+	"""
+	for name in LEGACY_QUERY_REPORT_NAMES:
+		if (
+			frappe.db.exists("Report", name)
+			and frappe.db.get_value("Report", name, "report_type") == "Query Report"
+		):
+			frappe.delete_doc("Report", name, ignore_permissions=True, force=True)
 
 
 def _ensure_to_review_shortcut():

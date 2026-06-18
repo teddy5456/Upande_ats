@@ -100,6 +100,40 @@ class ATSSettings(Document):
 			"source": "Default passmark",
 		}
 
+	def resolve_required_experience(self, designation: str | None, opening: str | None = None):
+		"""Resolve the minimum *relevant* years of experience required for an applicant.
+
+		Resolution order (highest priority first):
+		  1. Job Opening 'ats_min_relevant_experience' (per-opening override).
+		  2. Matching 'ATS Designation Threshold' row 'min_relevant_experience' (per-designation default).
+		  3. None — the experience gate is OFF (do not evaluate or reject).
+
+		A blank or zero value at a level is treated as "not set" and falls through.
+		Returns {required_years: float|None, source: str}.
+		"""
+		if opening:
+			override = frappe.db.get_value("Job Opening", opening, "ats_min_relevant_experience")
+			try:
+				override = float(override) if override else 0.0
+			except (TypeError, ValueError):
+				override = 0.0
+			if override > 0:
+				return {"required_years": override, "source": "Job Opening override"}
+
+		row = self._designation_row(designation)
+		if row:
+			try:
+				default = float(row.get("min_relevant_experience") or 0)
+			except (TypeError, ValueError):
+				default = 0.0
+			if default > 0:
+				return {
+					"required_years": default,
+					"source": f"Designation default ({designation})",
+				}
+
+		return {"required_years": None, "source": "Not set (experience gate off)"}
+
 	def get_enabled_engines(self):
 		return [
 			{"engine": w.engine_name, "weight": int(w.weight_pct or 0)}

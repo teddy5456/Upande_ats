@@ -16,6 +16,12 @@
   "score_breakdown",
   "mandatory_unmatched",
   "settings_snapshot",
+  "experience_section",
+  "relevant_experience",
+  "total_experience",
+  "required_experience",
+  "experience_status",
+  "experience_breakdown",
   "meta_section",
   "scored_on",
   "resume_file",
@@ -86,6 +92,51 @@
    "fieldtype": "Code",
    "label": "Settings Snapshot",
    "options": "JSON"
+  },
+  {
+   "fieldname": "experience_section",
+   "fieldtype": "Section Break",
+   "label": "Experience Snapshot"
+  },
+  {
+   "description": "Years of experience judged relevant to the opening's keywords at screen time.",
+   "fieldname": "relevant_experience",
+   "fieldtype": "Float",
+   "label": "Relevant Experience (yrs)",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "description": "Total work experience detected from the CV at screen time (overlaps merged).",
+   "fieldname": "total_experience",
+   "fieldtype": "Float",
+   "label": "Total Experience (yrs)",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The resolved minimum relevant years required at screen time. 0/blank means the experience gate was off.",
+   "fieldname": "required_experience",
+   "fieldtype": "Float",
+   "label": "Required Experience (yrs)",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "default": "Off",
+   "fieldname": "experience_status",
+   "fieldtype": "Select",
+   "label": "Experience Status",
+   "options": "Pass\nFail\nNeeds Review\nOff",
+   "read_only": 1
+  },
+  {
+   "description": "Per-role detected months and whether each was counted as relevant (JSON).",
+   "fieldname": "experience_breakdown",
+   "fieldtype": "Long Text",
+   "label": "Experience Breakdown",
+   "read_only": 1
   },
   {
    "fieldname": "meta_section",

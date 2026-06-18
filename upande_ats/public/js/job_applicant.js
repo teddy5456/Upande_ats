@@ -106,16 +106,78 @@ function render_breakdown(frm) {
 		const html = `
 			<div>
 				<div style="margin-bottom:8px">
-					<b>Final Score:</b> ${doc.score_pct}% &nbsp;
-					<b>Passmark:</b> ${doc.passmark_used}% &nbsp;
-					<b>Passes:</b> ${doc.passes_passmark ? "Yes" : "No"}
+					${overall_verdict_html(doc)}
+					<b>Keyword gate:</b> ${doc.passes_passmark ? "Pass" : "Fail"}
+					(${doc.score_pct}%, passmark ${doc.passmark_used}%)
 				</div>
 				${doc.mandatory_unmatched ? `<div class='text-danger'><b>Mandatory unmatched:</b> ${frappe.utils.escape_html(doc.mandatory_unmatched)}</div>` : ""}
 				${doc.note ? `<div class='text-muted'>${frappe.utils.escape_html(doc.note)}</div>` : ""}
 				<table class='table table-bordered' style='margin-top:8px'>${rows.join("")}</table>
+				${experience_section_html(doc)}
 			</div>`;
 		const d = new frappe.ui.Dialog({ title: __("ATS Score Breakdown"), size: "large" });
 		d.$body.html(html);
 		d.show();
 	});
+}
+
+// Overall verdict ("Passes") — combines the keyword gate AND the experience gate,
+// not the keyword gate alone.
+function overall_verdict(doc) {
+	const exp = doc.experience_status; // "Pass" | "Fail" | "Needs Review" | "Off"
+	if (!doc.passes_passmark) return "No";
+	if (exp === "Fail") return "No";
+	if (exp === "Needs Review") return "Needs Review";
+	return "Yes"; // keyword passed and experience is Pass or Off
+}
+
+function overall_verdict_html(doc) {
+	const verdict = overall_verdict(doc);
+	const color = verdict === "Yes" ? "green" : verdict === "Needs Review" ? "orange" : "red";
+	return `<b>Passes:</b> <span class='indicator-pill ${color}'>${verdict}</span> &nbsp;`;
+}
+
+function experience_section_html(doc) {
+	const required = Number(doc.required_experience || 0);
+	if (!(required > 0)) {
+		// Gate was off for this opening — say so rather than implying a missed requirement.
+		return `<div class='text-muted' style='margin-top:8px'>${__("Experience gate: off for this opening")}</div>`;
+	}
+
+	const relevant = Number(doc.relevant_experience || 0);
+	const total = Number(doc.total_experience || 0);
+	const below = relevant < required;
+	const relevant_color = below ? "text-danger" : "";
+
+	let breakdown_rows = "";
+	try {
+		const roles = JSON.parse(doc.experience_breakdown || "[]");
+		breakdown_rows = roles
+			.map((r) => {
+				const months = r.months != null ? `${r.months} months` : "";
+				const tag = r.relevant
+					? "<span class='indicator-pill green'>Counted</span>"
+					: "<span class='indicator-pill gray'>Not relevant</span>";
+				return `<li>${frappe.utils.escape_html(r.role_context || "(role)")} — ${months} — ${tag}</li>`;
+			})
+			.join("");
+	} catch (e) {
+		breakdown_rows = "";
+	}
+
+	const uncertain_note =
+		doc.experience_status === "Needs Review"
+			? `<div class='text-warning'>${__("Could not parse work history to confirm relevant experience.")}</div>`
+			: "";
+
+	return `
+		<div style="margin-top:14px">
+			<h6>${__("Experience")}</h6>
+			<div class='${relevant_color}'>
+				<b>Relevant experience:</b> ${relevant.toFixed(1)} yrs (required ${required.toFixed(1)})
+			</div>
+			<div><b>Total experience:</b> ${total.toFixed(1)} yrs</div>
+			${uncertain_note}
+			${breakdown_rows ? `<ul style='margin-top:6px'>${breakdown_rows}</ul>` : ""}
+		</div>`;
 }

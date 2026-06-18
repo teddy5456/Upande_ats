@@ -8,7 +8,8 @@
   "designation",
   "min_score",
   "action_on_fail",
-  "required_keywords"
+  "required_keywords",
+  "min_relevant_experience"
  ],
  "fields": [
   {
@@ -42,6 +43,13 @@
    "fieldname": "required_keywords",
    "fieldtype": "Small Text",
    "label": "Required Keywords"
+  },
+  {
+   "description": "Default minimum years of relevant experience for this designation. Used when a Job Opening does not set its own 'Minimum Relevant Years'. Leave blank/0 to leave the experience gate off by default.",
+   "fieldname": "min_relevant_experience",
+   "fieldtype": "Float",
+   "label": "Min Relevant Years",
+   "precision": "1"
   }
  ],
  "index_web_pages_for_search": 1,
