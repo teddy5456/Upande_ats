@@ -61,6 +61,7 @@ def _set_applicant(
 	reason=None,
 	experience=None,
 	auto_rejected=None,
+	reset_scores=False,
 ):
 	"""Write screening outcome via db.set_value to avoid re-triggering doc hooks.
 
@@ -68,6 +69,9 @@ def _set_applicant(
 	detected figures + breakdown are denormalized onto the applicant for HR.
 	`auto_rejected`, when not None, sets the ats_auto_rejected flag (1 when ATS
 	rejected the applicant, 0 when a clean re-run un-rejected them).
+	`reset_scores`, when True, zeroes the score/experience snapshot fields so a
+	Not Scored re-run doesn't leave a stale score banner or experience figures
+	(ats_auto_rejected and any human-set status are deliberately left untouched).
 	"""
 	values = {
 		"ats_result": result,
@@ -78,12 +82,33 @@ def _set_applicant(
 		values["status"] = status
 	if auto_rejected is not None:
 		values["ats_auto_rejected"] = auto_rejected
-	if experience and experience.get("state") != "off":
-		values["ats_total_experience"] = experience.get("total_years")
-		values["ats_relevant_experience"] = experience.get("relevant_years")
-		values["ats_experience_breakdown"] = json.dumps(
-			experience.get("breakdown") or [], default=str
+	if reset_scores:
+		values.update(
+			{
+				"ats_score": 0,
+				"ats_passes_passmark": 0,
+				# Un-set the current-score pointer. ATS Score rows are left in place
+				# when "Keep Score History" is on — this clears only the live pointer,
+				# not the audit trail.
+				"ats_score_link": None,
+				"ats_relevant_experience": 0,
+				"ats_total_experience": 0,
+				"ats_experience_breakdown": "",
+			}
 		)
+	if experience:
+		if experience.get("state") == "off":
+			# No experience requirement for this role this run: clear any figures a
+			# prior run wrote so the applicant doesn't show stale experience numbers.
+			values["ats_total_experience"] = 0
+			values["ats_relevant_experience"] = 0
+			values["ats_experience_breakdown"] = ""
+		else:
+			values["ats_total_experience"] = experience.get("total_years")
+			values["ats_relevant_experience"] = experience.get("relevant_years")
+			values["ats_experience_breakdown"] = json.dumps(
+				experience.get("breakdown") or [], default=str
+			)
 	frappe.db.set_value("Job Applicant", applicant, values, update_modified=False)
 	frappe.db.commit()
 
@@ -196,7 +221,7 @@ def run_screening(applicant: str, method=None) -> dict:
 	result = score_applicant(applicant, opening)
 	if not result:
 		reason = "Not scored: no linked Job Opening, no ATS keywords on the opening, or no resume."
-		_set_applicant(applicant, result="Not Scored", reason=reason)
+		_set_applicant(applicant, result="Not Scored", reason=reason, reset_scores=True)
 		return {"result": "Not Scored", "reason": reason}
 
 	score = float(result.get("score_pct") or 0)

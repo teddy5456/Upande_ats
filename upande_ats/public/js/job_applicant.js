@@ -46,13 +46,11 @@ frappe.ui.form.on("Job Applicant", {
 			__("ATS")
 		);
 
-		if (frm.doc.ats_score_link) {
-			frm.add_custom_button(
-				__("View Breakdown"),
-				() => render_breakdown(frm),
-				__("ATS")
-			);
-		}
+		frm.add_custom_button(
+			__("View Breakdown"),
+			() => render_breakdown(frm),
+			__("ATS")
+		);
 
 		render_score_widget(frm);
 	},
@@ -82,6 +80,21 @@ function render_score_widget(frm) {
 }
 
 function render_breakdown(frm) {
+	// Branch on the LIVE verdict before fetching anything: a Not Scored (or never
+	// scored / un-linked) applicant has no current ATS Score to show. Rendering the
+	// stale linked record here is how old snapshots leaked back after a Not Scored re-run.
+	if (!frm.doc.ats_result || frm.doc.ats_result === "Not Scored" || !frm.doc.ats_score_link) {
+		const d = new frappe.ui.Dialog({ title: __("ATS Score Breakdown"), size: "large" });
+		d.$body.html(
+			`<div class='text-muted'>${__(
+				"Not Scored — this applicant has no current ATS result " +
+				"(no keywords on the opening, no resume, or no linked opening). " +
+				"Re-run screening once configured."
+			)}</div>`
+		);
+		d.show();
+		return;
+	}
 	frappe.db.get_doc("ATS Score", frm.doc.ats_score_link).then((doc) => {
 		const breakdown = JSON.parse(doc.score_breakdown || "{}");
 		const rows = [];
