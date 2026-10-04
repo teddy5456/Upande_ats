@@ -53,8 +53,49 @@ frappe.ui.form.on("Job Applicant", {
 		);
 
 		render_score_widget(frm);
+
+		// Referee-consent send. Enabled only for shortlisted (ATS Pass) applicants;
+		// once a consent is Sent or Received there is nothing to send, so we hide it.
+		const passed_ats = frm.doc.ats_result === "Pass";
+		const consent_active = ["Sent", "Received"].includes(frm.doc.consent_status);
+		if (passed_ats && !consent_active) {
+			frm.add_custom_button(
+				__("Send Consent Form"),
+				() => send_consent_form(frm),
+				__("Consent")
+			);
+		}
 	},
 });
+
+function send_consent_form(frm) {
+	frappe.call({
+		method: "upande_ats.consent.send_consent_form",
+		args: { job_applicant: frm.doc.name },
+		freeze: true,
+		freeze_message: __("Sending consent form..."),
+	}).then((r) => {
+		const res = r.message;
+		if (!res) return;
+		if (res.emailed) {
+			frappe.show_alert(
+				{ message: __("Consent link emailed to the applicant."), indicator: "green" },
+				5
+			);
+		} else if (res.link) {
+			// Applicant has no email on file: hand the link to HR.
+			frappe.msgprint({
+				title: __("Consent Link"),
+				indicator: "blue",
+				message: __(
+					"No email on file. Share this consent link with the applicant:<br><br><a href='{0}' target='_blank'>{0}</a>",
+					[res.link]
+				),
+			});
+		}
+		frm.reload_doc();
+	});
+}
 
 function render_score_widget(frm) {
 	const wrapper = frm.fields_dict.ats_breakdown_html?.$wrapper;
@@ -170,7 +211,9 @@ function experience_section_html(doc) {
 				const months = r.months != null ? `${r.months} months` : "";
 				const tag = r.relevant
 					? "<span class='indicator-pill green'>Counted</span>"
-					: "<span class='indicator-pill gray'>Not relevant</span>";
+					: r.kind === "education"
+						? "<span class='indicator-pill gray'>Education — not counted</span>"
+						: "<span class='indicator-pill gray'>Not relevant</span>";
 				return `<li>${frappe.utils.escape_html(r.role_context || "(role)")} — ${months} — ${tag}</li>`;
 			})
 			.join("");

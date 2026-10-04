@@ -8,7 +8,10 @@ from .keyword_frequency import score_keyword_frequency
 from .text_extract import extract_text
 from .tfidf_cosine import score_tfidf
 
-ENGINE_VERSION = "1.0.0"
+# 1.1.0 — block-based role parsing (docx layouts), education excluded from
+# relevant experience, OCR fallback for scanned PDFs. Scores written by an older
+# version are re-run by patches.rescore_stale_experience.
+ENGINE_VERSION = "1.1.0"
 
 
 def _get_settings():

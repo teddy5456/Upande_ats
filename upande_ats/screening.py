@@ -228,7 +228,7 @@ def run_screening(applicant: str, method=None) -> dict:
 	score_name = result.get("name")
 
 	# Extract resume text once; reused by the required-keyword filter and the experience gate.
-	resume_text = extract_text(doc.get("resume_attachment"))
+	resume_text = extract_text(doc.get("resume_link") or doc.get("resume_attachment"))
 
 	# --- Keyword gate (unchanged semantics) ---
 	missing_required = []

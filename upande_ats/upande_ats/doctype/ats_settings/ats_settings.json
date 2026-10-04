@@ -24,7 +24,9 @@
   "synonym_groups",
   "files_section",
   "accepted_file_types",
-  "min_resume_chars"
+  "min_resume_chars",
+  "consent_section",
+  "consent_statement"
  ],
  "fields": [
   {
@@ -144,6 +146,17 @@
    "fieldname": "min_resume_chars",
    "fieldtype": "Int",
    "label": "Min Resume Characters"
+  },
+  {
+   "fieldname": "consent_section",
+   "fieldtype": "Section Break",
+   "label": "Referee Consent"
+  },
+  {
+   "description": "Wording shown to applicants on the referee-consent form. Editable here; copied into each Referee Consent at send time.",
+   "fieldname": "consent_statement",
+   "fieldtype": "Text Editor",
+   "label": "Consent Statement"
   }
  ],
  "index_web_pages_for_search": 1,

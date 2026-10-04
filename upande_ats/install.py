@@ -181,6 +181,7 @@ def after_install():
 	create_custom_fields(CUSTOM_FIELDS, update=True)
 	_seed_settings()
 	setup_hr_views()
+	_setup_referee_consent()
 	frappe.db.commit()
 
 
@@ -192,7 +193,24 @@ def after_migrate():
 	"""
 	create_custom_fields(CUSTOM_FIELDS, update=True)
 	setup_hr_views()
+	_setup_referee_consent()
 	frappe.db.commit()
+
+
+def _setup_referee_consent():
+	"""Idempotently re-assert the referee-consent custom fields, notification and
+	print format (also run by the add_referee_consent_setup patch)."""
+	from upande_ats.consent import (
+		ensure_default_statement,
+		ensure_job_applicant_fields,
+		ensure_notification,
+		ensure_print_format,
+	)
+
+	ensure_job_applicant_fields()
+	ensure_notification()
+	ensure_print_format()
+	ensure_default_statement()
 
 
 def setup_hr_views():

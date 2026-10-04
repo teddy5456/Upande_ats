@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "creation": "2026-08-11 00:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "full_name",
+  "national_id_no",
+  "relationship",
+  "phone_no",
+  "allocation_percentage"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "national_id_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "National ID No"
+  },
+  {
+   "columns": 2,
+   "fieldname": "relationship",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Relationship",
+   "options": "\nSpouse\nChild\nParent\nSibling\nGuardian\nOther",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "phone_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phone No",
+   "options": "Phone"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "allocation_percentage",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Allocation (%)"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande ATS",
+ "name": "Employee Next of Kin",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

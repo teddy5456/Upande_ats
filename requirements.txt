@@ -3,3 +3,6 @@ pdfplumber>=0.10.0
 docx2txt>=0.8
 scikit-learn>=1.3.0
 rapidfuzz>=3.5.0
+# OCR fallback for scanned/image-only PDFs (needs tesseract-ocr + poppler-utils)
+pytesseract>=0.3.10
+pdf2image>=1.16.0

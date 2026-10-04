@@ -1,0 +1,195 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-07-02 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "job_applicant",
+  "applicant_name",
+  "job_opening",
+  "designation",
+  "column_break_main",
+  "status",
+  "signed_on",
+  "source_ip",
+  "token",
+  "consent_section",
+  "consent_statement",
+  "consent_given",
+  "referees_section",
+  "referees",
+  "signoff_section",
+  "signed_by_name",
+  "signature"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "HR-CONSENT-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "job_applicant",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Job Applicant",
+   "options": "Job Applicant",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "job_applicant.applicant_name",
+   "fieldname": "applicant_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Applicant Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_applicant.job_title",
+   "fieldname": "job_opening",
+   "fieldtype": "Data",
+   "label": "Job Opening",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_applicant.designation",
+   "fieldname": "designation",
+   "fieldtype": "Data",
+   "label": "Designation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Sent",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Sent\nCompleted\nWithdrawn"
+  },
+  {
+   "fieldname": "signed_on",
+   "fieldtype": "Datetime",
+   "label": "Signed On",
+   "read_only": 1
+  },
+  {
+   "description": "IP address the signed submission was received from.",
+   "fieldname": "source_ip",
+   "fieldtype": "Data",
+   "label": "Source IP",
+   "read_only": 1
+  },
+  {
+   "description": "Single-use guest token for the tokenised consent link.",
+   "fieldname": "token",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Token",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "consent_section",
+   "fieldtype": "Section Break",
+   "label": "Consent"
+  },
+  {
+   "description": "Snapshot of the consent wording shown to the applicant at send time.",
+   "fieldname": "consent_statement",
+   "fieldtype": "Text Editor",
+   "label": "Consent Statement",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "consent_given",
+   "fieldtype": "Check",
+   "label": "Consent Given"
+  },
+  {
+   "fieldname": "referees_section",
+   "fieldtype": "Section Break",
+   "label": "Referees"
+  },
+  {
+   "fieldname": "referees",
+   "fieldtype": "Table",
+   "label": "Referees",
+   "options": "Referee Detail",
+   "reqd": 1
+  },
+  {
+   "fieldname": "signoff_section",
+   "fieldtype": "Section Break",
+   "label": "Sign-off"
+  },
+  {
+   "fieldname": "signed_by_name",
+   "fieldtype": "Data",
+   "label": "Signed By (Full Name)"
+  },
+  {
+   "fieldname": "signature",
+   "fieldtype": "Signature",
+   "label": "Signature"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-02 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande ATS",
+ "name": "Referee Consent",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

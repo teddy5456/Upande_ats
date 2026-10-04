@@ -4,7 +4,8 @@ Given the resume text (already lowercased + whitespace-normalized by
 engine.text_extract.normalize, with newlines preserved), this module:
 
   1. parse_work_history()  -> detect date ranges, turn each into a dated entry
-     with the surrounding text as `context` and a computed duration in months.
+     whose `context` is the whole role *block* (title/company heading above the
+     date, plus the duty lines below it) and a computed duration in months.
   2. classify_relevance()  -> using the opening's keywords (+ ATS synonym groups),
      mark each entry relevant or not, merging overlapping periods so concurrent
      roles aren't double-counted.
@@ -33,9 +34,10 @@ _MONTH = (
 # A single point in time the parser understands.
 _DATE_POINT = (
 	r"(?:"
-	r"" + _MONTH + r"\.?\s*,?\s*\d{4}"   # mon yyyy / month, yyyy
-	r"|\d{1,2}\s*[/\-]\s*\d{4}"           # mm/yyyy or mm-yyyy
-	r"|\d{4}"                              # bare year
+	r"" + _MONTH + r"\.?\s*,?\s*\d{4}"           # mon yyyy / month, yyyy
+	r"|\d{4}\s*[,\-/ ]?\s*" + _MONTH +            # yyyy mon (year-first, e.g. "2023 mar")
+	r"|\d{1,2}\s*[/\-]\s*\d{4}"                   # mm/yyyy or mm-yyyy
+	r"|\d{4}"                                      # bare year
 	r")"
 )
 
@@ -95,6 +97,14 @@ def _parse_point(token: str):
 	if re.fullmatch(r"\d{4}", token):
 		year = int(token)
 		return (year, 1) if _plausible_year(year) else None
+
+	# year-first: yyyy <month>  (e.g. "2023 mar", "2005, june", "2021-may")
+	m = re.match(r"(\d{4})\s*[,\-/ ]?\s*([a-z]+)", token, flags=re.IGNORECASE)
+	if m:
+		year = int(m.group(1))
+		mon = _MONTH_NUM.get(m.group(2).lower()[:4]) or _MONTH_NUM.get(m.group(2).lower()[:3])
+		if mon and _plausible_year(year):
+			return year, mon
 
 	# month-name year
 	m = re.match(r"([a-z]+)\.?\s*,?\s*(\d{4})", token, flags=re.IGNORECASE)
@@ -182,77 +192,302 @@ def _merge_months(intervals: list) -> int:
 	return total
 
 
-def parse_work_history(resume_text: str) -> list:
-	"""Return a list of entries: {context, start, end, months, open_ended}.
+# --- Layout: sections, bullets, role blocks ----------------------------------
+#
+# A role's title, its dates and its duties do NOT reliably share a physical line.
+# pdfplumber often glues them into one line; python-docx/docx2txt emit each
+# paragraph separately, so the date frequently sits alone. Judging relevance off
+# the date's own line therefore worked for PDFs and silently failed for .docx.
+# Everything below normalises both layouts into the same thing: a role *block*
+# made of the heading above the date, the date line, and the duty lines below.
 
-	`start`/`end` are (year, month) tuples; `context` is the line containing the
-	date range plus its neighbouring lines (role title above, duties below).
+# A heading is a short line; anything longer is prose (a duty sentence).
+_MAX_HEAD_LINES = 2
+_MAX_HEAD_LEN = 120
+# Duty lists are rarely longer than this; the cap stops one missing date from
+# swallowing the rest of the CV.
+_MAX_BODY_LINES = 10
+
+_HEADER_MAX_LEN = 60
+_HEADER_MAX_WORDS = 5
+
+# Section headers are matched word-by-word rather than against fixed phrases:
+# real CVs write "CERTIFICATION & EDUCATION", "Academic and Professional
+# Qualifications", "Additional Information". Every word must be known, which is
+# what keeps a job title ("Training Officer") from being read as a header.
+_HEADER_NEUTRAL = {
+	"a", "and", "of", "in", "my", "the", "to", "with", "other", "others",
+	"additional", "further", "more", "professional", "personal", "core", "key",
+	"main", "relevant", "detailed", "brief", "background", "details", "detail",
+	"section", "area", "areas",
+}
+_HEADER_EXPERIENCE = {
+	"experience", "experiences", "employment", "employments", "work", "working",
+	"history", "career", "record", "records", "attachment", "attachments",
+	"internship", "internships", "job", "jobs", "engagements", "engagement",
+	"exposure", "positions", "roles",
+}
+_HEADER_EDUCATION = {
+	"education", "educational", "academic", "academics", "qualification",
+	"qualifications", "certification", "certifications", "certificate",
+	"certificates", "schooling", "school", "training", "trainings", "course",
+	"courses", "studies", "development",
+}
+_HEADER_OTHER = {
+	"skills", "skill", "competencies", "competency", "competence", "strengths",
+	"referees", "referee", "references", "reference", "hobbies", "interests",
+	"information", "profile", "objective", "objectives", "summary", "languages",
+	"language", "achievements", "achievement", "awards", "award", "membership",
+	"memberships", "affiliations", "publications", "declaration", "contact",
+	"contacts", "technical", "computer", "attributes", "abilities", "activities",
+}
+
+_BULLET_RE = re.compile(
+	r"^\s*(?:[•▪●○◦‣➢❯❖♦⁃·"
+	r"–—\-\*\+>o]\s+|\d{1,2}[.)]\s+)"
+)
+
+# Schooling markers — a block carrying these and no employer/duty signal is a
+# qualification row, not a job, however many keywords it happens to contain.
+_EDU_SIGNALS_RE = re.compile(
+	r"(?<![a-z])(?:university|universities|college|polytechnic|institute|"
+	r"school|academy|campus|bachelor|bachelors|b\.?sc|b\.?com|b\.?a\.?|"
+	r"m\.?sc|mba|master|masters|phd|diploma|certificate|degree|"
+	r"cpa|cpa-?k|acca|cifa|kasneb|kcse|kcpe|"
+	r"undergraduate|postgraduate|graduated|form four|"
+	r"part\s+(?:i{1,3}|iv|[1-4])|section\s+[1-6])(?![a-z])"
+)
+
+# Employer / duty markers — presence means the block describes a job. Job
+# *titles* are deliberately absent: "certified public accountant, part 1" is a
+# qualification, not an employer, and would otherwise rescue every CPA row.
+_WORK_SIGNALS_RE = re.compile(
+	r"(?<![a-z])(?:ltd|limited|plc|inc|llc|company|co|corporation|enterprises|"
+	r"holdings|group|sacco|bank|hotel|hospital|agency|firm|farm|farms|flowers|"
+	r"duties|responsibilities|responsible|reporting|report|reports|managed|manage|"
+	r"managing|prepared|preparing|reconciliation|reconciliations|reconciled|"
+	r"reconciling|invoicing|invoices|invoice|payroll|payments|supervised|"
+	r"supervising|assisted|assisting|maintained|maintaining|processed|processing|"
+	r"handled|handling|liaised|liaise|internship|attachment|intern|"
+	r"employer|employed|position|role)(?![a-z])"
+)
+
+# A clause that opens with a negation asserts the absence of something; matching
+# keywords inside it would count "no floriculture exposure in this role" as
+# floriculture experience.
+_NEGATED_CLAUSE_RE = re.compile(r"^(?:no|not|none|never|without|nil)(?![a-z])")
+
+
+def _header_kind(line: str) -> str:
+	"""Return 'experience' / 'education' / 'other' if the line is a section header."""
+	text = line.strip()
+	if len(text) > _HEADER_MAX_LEN or _RANGE_RE.search(text):
+		return ""
+
+	words = [w for w in re.findall(r"[a-z]+", text.lower()) if w not in _HEADER_NEUTRAL]
+	if not words or len(words) > _HEADER_MAX_WORDS:
+		return ""
+
+	kinds = set()
+	for word in words:
+		if word in _HEADER_EXPERIENCE:
+			kinds.add("experience")
+		elif word in _HEADER_EDUCATION:
+			kinds.add("education")
+		elif word in _HEADER_OTHER:
+			kinds.add("other")
+		else:
+			# An unknown word means this is content, not a section header.
+			return ""
+
+	# A combined header ("Education and Work Experience") must not hide the jobs
+	# under it, so experience wins.
+	if "experience" in kinds:
+		return "experience"
+	if "education" in kinds:
+		return "education"
+	return "other"
+
+
+def _clean_lines(resume_text: str) -> list:
+	"""Split into stripped, non-empty lines — the shared shape for every format."""
+	out = []
+	for raw in (resume_text or "").split("\n"):
+		line = re.sub(r"\s{2,}", " ", raw.strip())
+		if line:
+			out.append(line)
+	return out
+
+
+def _scan_lines(lines: list) -> list:
+	"""Annotate each line with its section, header-ness and bullet-ness."""
+	meta = []
+	section = ""
+	for text in lines:
+		kind = _header_kind(text)
+		if kind:
+			section = kind
+		meta.append(
+			{
+				"text": text,
+				"is_header": bool(kind),
+				"section": section,
+				"is_bullet": bool(_BULLET_RE.match(text)),
+			}
+		)
+	return meta
+
+
+def _date_ranges_in(line: str) -> list:
+	"""Every (start, end, open_ended) range on this line. Months logic unchanged."""
+	matches = []
+
+	for m in _RANGE_RE.finditer(line):
+		start = _parse_point(m.group("start"))
+		end_tok = m.group("end")
+		end = _parse_point(end_tok)
+		# A role is unparseable only if BOTH ends fail. If just the end
+		# didn't parse, treat the range as running to today; without a
+		# start there's no anchor to measure from, so drop it.
+		if not start and not end:
+			continue
+		open_ended = bool(re.fullmatch(_OPEN_ENDED, end_tok.strip(), flags=re.IGNORECASE))
+		if not end:
+			end = _today_ym()
+			open_ended = True
+		if not start:
+			continue
+		# Discard reversed/implausible ranges.
+		if _months_between(start, end) <= 0 and not open_ended:
+			continue
+		matches.append((start, end, open_ended))
+
+	for m in _SINCE_RE.finditer(line):
+		start = _parse_point(m.group("start"))
+		if start:
+			matches.append((start, _today_ym(), True))
+
+	return matches
+
+
+def _looks_like_prose(text: str) -> bool:
+	"""A finished sentence — i.e. a duty line, not a title/company heading."""
+	return text.endswith((".", ";", "!")) and len(text.split()) >= 6
+
+
+def _heading_start(meta: list, idx: int, prev_idx: int, date_lines: set) -> int:
+	"""Index of the first heading line belonging to the date line at `idx`.
+
+	Walks up from the date line while lines still look like a title/company
+	heading — short, not prose, not a bullet, not a section header, not another
+	date line. Returns `idx` itself when the date line carries its own heading
+	(the glued single-line layout pdfplumber produces).
+	"""
+	start = idx
+	j = idx - 1
+	while j > prev_idx and (idx - j) <= _MAX_HEAD_LINES:
+		m = meta[j]
+		if m["is_header"] or m["is_bullet"] or j in date_lines:
+			break
+		if len(m["text"]) > _MAX_HEAD_LEN or _looks_like_prose(m["text"]):
+			break
+		start = j
+		j -= 1
+	return start
+
+
+def _is_education_block(section: str, text: str) -> bool:
+	"""True when the block is a qualification row rather than a job.
+
+	Anything under an Education/Qualifications header counts. Elsewhere (headers
+	are often missing or unrecognised) a block is education only when it carries
+	schooling markers and no employer or duty signal at all — so an accounting
+	job that merely mentions a degree still counts as work.
+	"""
+	if section == "education":
+		return True
+	if not text:
+		return False
+	return bool(_EDU_SIGNALS_RE.search(text)) and not _WORK_SIGNALS_RE.search(text)
+
+
+def parse_work_history(resume_text: str) -> list:
+	"""Return a list of entries: {context, label, start, end, months, open_ended,
+	is_education}.
+
+	`start`/`end` are (year, month) tuples. `context` is the full role block
+	(heading + date line + duty lines) — relevance is judged on all of it, since
+	the accounting terms often live in the duties and not in the title. `label`
+	is the heading + date line only, for display in the HR breakdown.
 	"""
 	if not resume_text:
 		return []
 
-	lines = resume_text.split("\n")
+	lines = _clean_lines(resume_text)
+	if not lines:
+		return []
+	meta = _scan_lines(lines)
+
+	dated = []
+	for i, m in enumerate(meta):
+		ranges = _date_ranges_in(m["text"])
+		if ranges:
+			dated.append((i, ranges))
+	if not dated:
+		return []
+
+	idxs = [i for i, _ in dated]
+	date_lines = set(idxs)
+
+	# Headings first: a block's duties stop where the next block's heading starts,
+	# so a title paragraph is never also counted as the previous role's duty.
+	heads = {}
+	for pos, i in enumerate(idxs):
+		heads[i] = _heading_start(meta, i, idxs[pos - 1] if pos else -1, date_lines)
+
 	entries = []
+	for pos, (i, ranges) in enumerate(dated):
+		next_i = idxs[pos + 1] if pos + 1 < len(idxs) else len(meta)
+		body_end = min(heads.get(next_i, next_i), i + 1 + _MAX_BODY_LINES)
+		body = []
+		for j in range(i + 1, body_end):
+			if meta[j]["is_header"]:
+				break
+			body.append(meta[j]["text"])
 
-	for i, line in enumerate(lines):
-		matches = []
+		head = [meta[j]["text"] for j in range(heads[i], i)]
+		label = " ".join([*head, meta[i]["text"]]).strip()
+		context = " ".join([*head, meta[i]["text"], *body]).strip()
+		is_education = _is_education_block(meta[i]["section"], context)
 
-		for m in _RANGE_RE.finditer(line):
-			start = _parse_point(m.group("start"))
-			end_tok = m.group("end")
-			end = _parse_point(end_tok)
-			# A role is unparseable only if BOTH ends fail. If just the end
-			# didn't parse, treat the range as running to today; without a
-			# start there's no anchor to measure from, so drop it.
-			if not start and not end:
-				continue
-			open_ended = bool(re.fullmatch(_OPEN_ENDED, end_tok.strip(), flags=re.IGNORECASE))
-			if not end:
-				end = _today_ym()
-				open_ended = True
-			if not start:
-				continue
-			# Discard reversed/implausible ranges.
-			if _months_between(start, end) <= 0 and not open_ended:
-				continue
-			matches.append((start, end, open_ended))
-
-		for m in _SINCE_RE.finditer(line):
-			start = _parse_point(m.group("start"))
-			if start:
-				matches.append((start, _today_ym(), True))
-
-		if not matches:
-			continue
-
-		context = _context_for(lines, i)
-		for start, end, open_ended in matches:
+		for start, end, open_ended in ranges:
 			months = max(0, _months_between(start, end))
 			entries.append(
 				{
 					"context": context,
+					"label": label,
 					"start": start,
 					"end": end,
 					"months": months,
 					"open_ended": open_ended,
+					"is_education": is_education,
 				}
 			)
 
 	return entries
 
 
-def _context_for(lines: list, idx: int) -> str:
-	"""Role title is usually on/above the date line; duties below. Grab a window."""
-	lo = max(0, idx - 1)
-	hi = min(len(lines), idx + 2)
-	window = " ".join(l.strip() for l in lines[lo:hi] if l.strip())
-	return re.sub(r"\s{2,}", " ", window).strip()
+def _drop_negated_clauses(text: str) -> str:
+	"""Remove sentences that assert an absence ("no floriculture exposure ...")."""
+	kept = [s for s in re.split(r"(?<=[.;!?])\s+|\n", text) if not _NEGATED_CLAUSE_RE.match(s.strip())]
+	return " ".join(kept)
 
 
 def _entry_is_relevant(context: str, keywords: list, synonym_map: dict) -> bool:
 	"""True if the entry's context mentions any opening keyword (or its synonyms)."""
 	if not context:
 		return False
+	context = _drop_negated_clauses(context)
 	for kw in keywords:
 		term = (kw.get("keyword") or "").strip()
 		if not term:
@@ -279,7 +514,11 @@ def classify_relevance(entries: list, keywords: list, synonym_map: dict) -> dict
 		ctx = e.get("context") or ""
 		if ctx:
 			has_context = True
-		relevant = _entry_is_relevant(ctx, keywords, synonym_map)
+		is_education = bool(e.get("is_education"))
+		# A qualification row never counts as work, however many role keywords it
+		# carries ("... university 2015-2019 cpa part ii" is not four years of
+		# accounting experience).
+		relevant = (not is_education) and _entry_is_relevant(ctx, keywords, synonym_map)
 		if relevant and ctx:
 			has_relevant_with_context = True
 
@@ -288,13 +527,14 @@ def classify_relevance(entries: list, keywords: list, synonym_map: dict) -> dict
 		if relevant:
 			relevant_intervals.append((s_idx, e_idx))
 
-		breakdown.append(
-			{
-				"role_context": _short(ctx),
-				"months": e["months"],
-				"relevant": relevant,
-			}
-		)
+		row = {
+			"role_context": _short(e.get("label") or ctx),
+			"months": e["months"],
+			"relevant": relevant,
+		}
+		if is_education:
+			row["kind"] = "education"
+		breakdown.append(row)
 
 	return {
 		"total_months": _merge_months(all_intervals),

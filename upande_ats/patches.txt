@@ -4,3 +4,7 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
+upande_ats.patches.add_referee_consent_setup
+upande_ats.patches.rescore_stale_experience
+upande_ats.patches.v1_0.create_candidate_regret_notification
+upande_ats.patches.v1_0.create_employee_next_of_kin_fields
